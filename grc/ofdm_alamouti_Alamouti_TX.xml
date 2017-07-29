@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<block>
+	<name>Alamouti_TX</name>
+	<key>ofdm_alamouti_Alamouti_TX</key>
+	<category>[ofdm_alamouti]</category>
+	<import>import ofdm_alamouti</import>
+	<make>ofdm_alamouti.Alamouti_TX($N, $L)</make>
+	<!-- Make one 'param' node for every Parameter you want settable from the 
+		GUI. Sub-nodes: * name * key (makes the value accessible as $keyname, e.g. 
+		in the make node) * type -->
+	<param>
+		<name>Number of symbols</name>
+		<key>N</key>
+		<value>256</value>
+		<type>int</type>
+	</param>
+
+	<param>
+		<name>Max tap of channel</name>
+		<key>L</key>
+		<value>4</value>
+		<type>int</type>
+
+	</param>
+
+	<source>
+		<name>out1</name>
+		<type>complex</type>
+	</source>
+
+	<source>
+		<name>out2</name>
+		<type>complex</type>
+	</source>
+</block>

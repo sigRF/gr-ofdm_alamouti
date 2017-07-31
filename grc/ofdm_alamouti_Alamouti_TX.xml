@@ -23,6 +23,12 @@
 
 	</param>
 
+	<sink>
+		<name>tx_en</name>
+		<type>message</type>
+	</sink>
+
+
 	<source>
 		<name>out1</name>
 		<type>complex</type>

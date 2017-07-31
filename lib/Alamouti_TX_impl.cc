@@ -34,8 +34,7 @@ namespace gr
     Alamouti_TX::sptr
     Alamouti_TX::make (int N, int L)
     {
-      return gnuradio::get_initial_sptr (
-	  new Alamouti_TX_impl (N, L));
+      return gnuradio::get_initial_sptr (new Alamouti_TX_impl (N, L));
     }
 
     /*
@@ -45,7 +44,9 @@ namespace gr
 	    gr::sync_block ("Alamouti_TX", gr::io_signature::make (0, 0, 0),
 			    gr::io_signature::make (2, 2, sizeof(gr_complex))),
 	    d_N (N),
-	    d_L (L)
+	    d_L (L),
+	    d_transmit_en (true),
+	    d_transmit_ack (false)
 
     {
       d_DATA = (gr_complex*) volk_malloc ((d_N) * sizeof(gr_complex), 32);
@@ -63,11 +64,10 @@ namespace gr
       d_alamouti2CP = (gr_complex*) volk_malloc (
 	  (d_N + d_L) * sizeof(gr_complex), 32);
 
-
-      memset(d_PREAMBLE,0,d_N*sizeof(gr_complex));
+      memset (d_PREAMBLE, 0, d_N * sizeof(gr_complex));
       // create random Preambles
       create_data (d_PREAMBLE, 1, 2);
-      volk_32fc_s32fc_multiply_32fc (d_PREAMBLE, d_PREAMBLE, sqrt(2), d_N);
+      volk_32fc_s32fc_multiply_32fc (d_PREAMBLE, d_PREAMBLE, sqrt (2), d_N);
 
       // create random Data
       create_data (d_DATA, 2, 1);
@@ -78,8 +78,8 @@ namespace gr
 	d_ALAMOUTI2[i] = d_DATA[i + 1];
 
 	/* second time slot */
-	d_ALAMOUTI1[i+1] = -conj (d_DATA[i + 1]);
-	d_ALAMOUTI2[i+1] = conj (d_DATA[i]);
+	d_ALAMOUTI1[i + 1] = -conj (d_DATA[i + 1]);
+	d_ALAMOUTI2[i + 1] = conj (d_DATA[i]);
 
       }
 
@@ -95,15 +95,17 @@ namespace gr
       d_fft->execute ();
       memcpy (d_alamouti1, d_fft->get_outbuf (), d_N * sizeof(gr_complex));
 
-
       memcpy (d_fft_in, d_ALAMOUTI2, d_N * sizeof(gr_complex));
       d_fft->execute ();
       memcpy (d_alamouti2, d_fft->get_outbuf (), d_N * sizeof(gr_complex));
 
       /* multiply with scalar */
-      volk_32fc_s32fc_multiply_32fc (d_preamble, d_preamble, sqrt (d_N)/d_N, d_N);
-      volk_32fc_s32fc_multiply_32fc (d_alamouti1, d_alamouti1, sqrt (d_N)/d_N, d_N);
-      volk_32fc_s32fc_multiply_32fc (d_alamouti2, d_alamouti2, sqrt (d_N)/d_N, d_N);
+      volk_32fc_s32fc_multiply_32fc (d_preamble, d_preamble, sqrt (d_N) / d_N,
+				     d_N);
+      volk_32fc_s32fc_multiply_32fc (d_alamouti1, d_alamouti1, sqrt (d_N) / d_N,
+				     d_N);
+      volk_32fc_s32fc_multiply_32fc (d_alamouti2, d_alamouti2, sqrt (d_N) / d_N,
+				     d_N);
 
       // add CP at alamouti1, alamouti2 and preambles
       for (int i = 0; i < d_L; i++) {
@@ -112,12 +114,9 @@ namespace gr
 	d_alamouti2CP[i] = d_alamouti2[d_N - d_L + i];
       }
 
+      memcpy (&d_preambleCP[d_L], d_preamble, d_N * sizeof(gr_complex));
       memcpy (&d_alamouti1CP[d_L], d_alamouti1, d_N * sizeof(gr_complex));
       memcpy (&d_alamouti2CP[d_L], d_alamouti2, d_N * sizeof(gr_complex));
-
-
-
-
 
       d_tx1_packet = (gr_complex*) volk_malloc (
 	  2 * (d_N + d_L) * sizeof(gr_complex), 32);
@@ -133,7 +132,22 @@ namespace gr
       memcpy (d_tx2_packet, d_preambleCP, (d_N + d_L) * sizeof(gr_complex));
       memcpy (&d_tx2_packet[d_N + d_L], d_alamouti2CP,
 	      (d_N + d_L) * sizeof(gr_complex));
-      set_output_multiple(2*(d_N+d_L)); // useless?
+
+      /* packets with zeros */
+      d_tx1_packet_with_zeros = (gr_complex*) volk_malloc (2*2*(d_N+d_L) * sizeof(gr_complex), 32);
+      d_tx2_packet_with_zeros = (gr_complex*) volk_malloc (2*2*(d_N+d_L) * sizeof(gr_complex), 32);
+
+      memset (d_tx1_packet_with_zeros, 0,
+	      2 * 2 * (d_N + d_L) * sizeof(gr_complex));
+      memset (d_tx2_packet_with_zeros, 0,
+	      2 * 2 * (d_N + d_L) * sizeof(gr_complex));
+      memcpy (d_tx1_packet_with_zeros, d_tx1_packet,
+	      2 * (d_N + d_L) * sizeof(gr_complex));
+      memcpy (d_tx2_packet_with_zeros, d_tx2_packet,
+	      2 * (d_N + d_L) * sizeof(gr_complex));
+
+      message_port_register_in (pmt::mp ("tx_en"));
+      set_output_multiple (2*2 * (d_N + d_L)); // useless?
 
     }
 
@@ -142,19 +156,21 @@ namespace gr
      */
     Alamouti_TX_impl::~Alamouti_TX_impl ()
     {
-      volk_free(d_DATA);
-      volk_free(d_PREAMBLE);
-      volk_free(d_ALAMOUTI1);
-      volk_free(d_ALAMOUTI2);
-      volk_free(d_preamble);
-      volk_free(d_alamouti1);
-      volk_free(d_alamouti2);
-      volk_free(d_preambleCP);
-      volk_free(d_alamouti1CP);
-      volk_free(d_alamouti2CP);
-      volk_free(d_tx1_packet);
-      volk_free(d_tx2_packet);
-      volk_free(d_DATA);
+      volk_free (d_DATA);
+      volk_free (d_PREAMBLE);
+      volk_free (d_ALAMOUTI1);
+      volk_free (d_ALAMOUTI2);
+      volk_free (d_preamble);
+      volk_free (d_alamouti1);
+      volk_free (d_alamouti2);
+      volk_free (d_preambleCP);
+      volk_free (d_alamouti1CP);
+      volk_free (d_alamouti2CP);
+      volk_free (d_tx1_packet);
+      volk_free (d_tx2_packet);
+      volk_free (d_DATA);
+      volk_free (d_tx1_packet_with_zeros);
+      volk_free (d_tx2_packet_with_zeros);
       delete d_fft;
     }
 
@@ -166,11 +182,22 @@ namespace gr
       gr_complex *out1 = (gr_complex*) output_items[0];
       gr_complex *out2 = (gr_complex*) output_items[1];
 
-      memcpy (out1, d_tx1_packet, 2*(d_N + d_L) * sizeof(gr_complex));
-      memcpy (out2, d_tx2_packet, 2*(d_N + d_L) * sizeof(gr_complex));
+      if (d_transmit_en) {
+	d_transmit_en = false;
+	/* block until message (command) to transmit received. The payload of the message is don't care */
+	pmt::pmt_t msg = delete_head_blocking (pmt::mp ("tx_en"));
+	memcpy (out1, d_tx1_packet_with_zeros, 2*2 * (d_N + d_L) * sizeof(gr_complex));
+	memcpy (out2, d_tx2_packet_with_zeros, 2*2 * (d_N + d_L) * sizeof(gr_complex));
+	d_transmit_ack = true;
+      }
 
+      if (d_transmit_ack) {
+	d_transmit_en = true;
+	d_transmit_ack = false;
+
+      }
       // Tell runtime system how many output items we produced.
-      return 2*(d_N+d_L);
+      return 2*2 * (d_N + d_L);
     }
 
     void

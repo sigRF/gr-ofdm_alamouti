@@ -37,6 +37,8 @@ namespace gr
     private:
       int d_N;
       int d_L;
+      bool d_transmit_en;
+      bool d_transmit_ack;
 
       gr_complex *d_DATA;
       gr_complex *d_PREAMBLE;
@@ -56,6 +58,10 @@ namespace gr
       fft::fft_complex *d_fft;
       gr_complex *d_tx1_packet;
       gr_complex *d_tx2_packet;
+
+      gr_complex *d_tx1_packet_with_zeros;
+      gr_complex *d_tx2_packet_with_zeros;
+
 
     public:
       Alamouti_TX_impl (int N, int L);

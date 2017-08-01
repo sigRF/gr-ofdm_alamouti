@@ -35,8 +35,9 @@ namespace gr
     class Alamouti_TX_impl : public Alamouti_TX
     {
     private:
-      int d_N;
-      int d_L;
+      size_t d_N_data_subc;
+      size_t d_N_preamble_subc;
+      size_t d_channel_len;
       bool d_transmit_en;
       bool d_transmit_ack;
 
@@ -55,7 +56,9 @@ namespace gr
       gr_complex *d_alamouti2CP;
 
       /* Auxiliary FFT vector */
-      fft::fft_complex *d_fft;
+      fft::fft_complex *d_fft_pr;
+      fft::fft_complex *d_fft_da;
+
       gr_complex *d_tx1_packet;
       gr_complex *d_tx2_packet;
 
@@ -64,7 +67,7 @@ namespace gr
 
 
     public:
-      Alamouti_TX_impl (int N, int L);
+      Alamouti_TX_impl (size_t N_data_subc,size_t N_preamble_subc, size_t channel_len);
       ~Alamouti_TX_impl ();
 
       // Where all the action really happens
@@ -73,7 +76,7 @@ namespace gr
 	    gr_vector_void_star &output_items);
 
       void
-      create_data (gr_complex *random_symbols, int random_factor, int step);
+      create_data (gr_complex *random_symbols, int random_factor, int step, int n_items);
 
     };
 

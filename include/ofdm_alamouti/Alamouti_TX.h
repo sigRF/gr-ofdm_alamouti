@@ -46,7 +46,7 @@ namespace gr {
        * class. ofdm_alamouti::Alamouti_TX::make is the public interface for
        * creating new instances.
        */
-      static sptr make(int N, int L);
+      static sptr make(size_t N_data_subc,size_t N_preamble_subc, size_t channel_len);
     };
 
   } // namespace ofdm_alamouti

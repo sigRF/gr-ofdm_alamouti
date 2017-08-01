@@ -421,7 +421,7 @@
     </param>
     <param>
       <key>_coordinate</key>
-      <value>(103, 231)</value>
+      <value>(143, 259)</value>
     </param>
     <param>
       <key>_rotation</key>
@@ -436,7 +436,7 @@
       <value>0</value>
     </param>
     <param>
-      <key>L</key>
+      <key>channel_len</key>
       <value>4</value>
     </param>
     <param>
@@ -444,8 +444,12 @@
       <value>0</value>
     </param>
     <param>
-      <key>N</key>
-      <value>256</value>
+      <key>N_preamble_subc</key>
+      <value>32</value>
+    </param>
+    <param>
+      <key>N_data_subc</key>
+      <value>512</value>
     </param>
   </block>
   <block>

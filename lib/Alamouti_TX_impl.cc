@@ -32,47 +32,60 @@ namespace gr
   {
 
     Alamouti_TX::sptr
-    Alamouti_TX::make (int N, int L)
+    Alamouti_TX::make (size_t N_data_subc, size_t N_preamble_subc,
+		       size_t channel_len)
     {
-      return gnuradio::get_initial_sptr (new Alamouti_TX_impl (N, L));
+      return gnuradio::get_initial_sptr (
+	  new Alamouti_TX_impl (N_data_subc, N_preamble_subc, channel_len));
     }
 
     /*
      * The private constructor
      */
-    Alamouti_TX_impl::Alamouti_TX_impl (int N, int L) :
+    Alamouti_TX_impl::Alamouti_TX_impl (size_t N_data_subc,
+					size_t N_preamble_subc,
+					size_t channel_len) :
 	    gr::sync_block ("Alamouti_TX", gr::io_signature::make (0, 0, 0),
 			    gr::io_signature::make (2, 2, sizeof(gr_complex))),
-	    d_N (N),
-	    d_L (L),
+	    d_N_data_subc (N_data_subc),
+	    d_N_preamble_subc (N_preamble_subc),
+	    d_channel_len (channel_len),
 	    d_transmit_en (true),
 	    d_transmit_ack (false)
 
     {
-      d_DATA = (gr_complex*) volk_malloc ((d_N) * sizeof(gr_complex), 32);
-      d_PREAMBLE = (gr_complex*) volk_malloc ((d_N) * sizeof(gr_complex), 32);
-      d_ALAMOUTI1 = (gr_complex*) volk_malloc ((d_N) * sizeof(gr_complex), 32);
-      d_ALAMOUTI2 = (gr_complex*) volk_malloc ((d_N) * sizeof(gr_complex), 32);
-      d_preamble = (gr_complex*) volk_malloc ((d_N) * sizeof(gr_complex), 32);
-      d_alamouti1 = (gr_complex*) volk_malloc ((d_N) * sizeof(gr_complex), 32);
-      d_alamouti2 = (gr_complex*) volk_malloc ((d_N) * sizeof(gr_complex), 32);
+      d_DATA = (gr_complex*) volk_malloc ((d_N_data_subc) * sizeof(gr_complex),
+					  32);
+      d_PREAMBLE = (gr_complex*) volk_malloc (
+	  (d_N_preamble_subc) * sizeof(gr_complex), 32);
+      d_ALAMOUTI1 = (gr_complex*) volk_malloc (
+	  (d_N_data_subc) * sizeof(gr_complex), 32);
+      d_ALAMOUTI2 = (gr_complex*) volk_malloc (
+	  (d_N_data_subc) * sizeof(gr_complex), 32);
+      d_preamble = (gr_complex*) volk_malloc (
+	  (d_N_preamble_subc) * sizeof(gr_complex), 32);
+      d_alamouti1 = (gr_complex*) volk_malloc (
+	  (d_N_data_subc) * sizeof(gr_complex), 32);
+      d_alamouti2 = (gr_complex*) volk_malloc (
+	  (d_N_data_subc) * sizeof(gr_complex), 32);
 
       d_preambleCP = (gr_complex*) volk_malloc (
-	  (d_N + d_L) * sizeof(gr_complex), 32);
+	  (d_N_preamble_subc + d_channel_len) * sizeof(gr_complex), 32);
       d_alamouti1CP = (gr_complex*) volk_malloc (
-	  (d_N + d_L) * sizeof(gr_complex), 32);
+	  (d_N_data_subc + d_channel_len) * sizeof(gr_complex), 32);
       d_alamouti2CP = (gr_complex*) volk_malloc (
-	  (d_N + d_L) * sizeof(gr_complex), 32);
+	  (d_N_data_subc + d_channel_len) * sizeof(gr_complex), 32);
 
-      memset (d_PREAMBLE, 0, d_N * sizeof(gr_complex));
+      memset (d_PREAMBLE, 0, d_N_preamble_subc * sizeof(gr_complex));
       // create random Preambles
-      create_data (d_PREAMBLE, 1, 2);
-      volk_32fc_s32fc_multiply_32fc (d_PREAMBLE, d_PREAMBLE, sqrt (2), d_N);
+      create_data (d_PREAMBLE, 1, 2, d_N_preamble_subc);
+      volk_32fc_s32fc_multiply_32fc (d_PREAMBLE, d_PREAMBLE, sqrt (2),
+				     d_N_preamble_subc);
 
       // create random Data
-      create_data (d_DATA, 2, 1);
+      create_data (d_DATA, 2, 1, d_N_data_subc);
 
-      for (int i = 0; i < d_N; i = i + 2) {
+      for (int i = 0; i < d_N_data_subc; i = i + 2) {
 	/* first time slot */
 	d_ALAMOUTI1[i] = d_DATA[i];
 	d_ALAMOUTI2[i] = d_DATA[i + 1];
@@ -83,71 +96,88 @@ namespace gr
 
       }
 
-      d_fft = new fft::fft_complex (d_N, false, 1);
+      d_fft_pr = new fft::fft_complex (d_N_preamble_subc, false, 1);
+      d_fft_da = new fft::fft_complex (d_N_data_subc, false, 1);
 
-      gr_complex *d_fft_in = d_fft->get_inbuf ();
+      gr_complex *d_fft_pr_in = d_fft_pr->get_inbuf ();
+      gr_complex *d_fft_da_in = d_fft_da->get_inbuf ();
 
-      memcpy (d_fft_in, d_PREAMBLE, d_N * sizeof(gr_complex));
-      d_fft->execute ();
-      memcpy (d_preamble, d_fft->get_outbuf (), d_N * sizeof(gr_complex));
+      memcpy (d_fft_pr_in, d_PREAMBLE, d_N_preamble_subc * sizeof(gr_complex));
+      d_fft_pr->execute ();
+      memcpy (d_preamble, d_fft_pr->get_outbuf (),
+	      d_N_preamble_subc * sizeof(gr_complex));
 
-      memcpy (d_fft_in, d_ALAMOUTI1, d_N * sizeof(gr_complex));
-      d_fft->execute ();
-      memcpy (d_alamouti1, d_fft->get_outbuf (), d_N * sizeof(gr_complex));
+      memcpy (d_fft_da_in, d_ALAMOUTI1, d_N_data_subc * sizeof(gr_complex));
+      d_fft_da->execute ();
+      memcpy (d_alamouti1, d_fft_da->get_outbuf (),
+	      d_N_data_subc * sizeof(gr_complex));
 
-      memcpy (d_fft_in, d_ALAMOUTI2, d_N * sizeof(gr_complex));
-      d_fft->execute ();
-      memcpy (d_alamouti2, d_fft->get_outbuf (), d_N * sizeof(gr_complex));
+      memcpy (d_fft_da_in, d_ALAMOUTI2, d_N_data_subc * sizeof(gr_complex));
+      d_fft_da->execute ();
+      memcpy (d_alamouti2, d_fft_da->get_outbuf (),
+	      d_N_data_subc * sizeof(gr_complex));
 
       /* multiply with scalar */
-      volk_32fc_s32fc_multiply_32fc (d_preamble, d_preamble, sqrt (d_N) / d_N,
-				     d_N);
-      volk_32fc_s32fc_multiply_32fc (d_alamouti1, d_alamouti1, sqrt (d_N) / d_N,
-				     d_N);
-      volk_32fc_s32fc_multiply_32fc (d_alamouti2, d_alamouti2, sqrt (d_N) / d_N,
-				     d_N);
+      volk_32fc_s32fc_multiply_32fc (
+	  d_preamble, d_preamble, sqrt (d_N_preamble_subc) / d_N_preamble_subc,
+	  d_N_preamble_subc);
+      volk_32fc_s32fc_multiply_32fc (d_alamouti1, d_alamouti1,
+				     sqrt (d_N_data_subc) / d_N_data_subc,
+				     d_N_data_subc);
+      volk_32fc_s32fc_multiply_32fc (d_alamouti2, d_alamouti2,
+				     sqrt (d_N_data_subc) / d_N_data_subc,
+				     d_N_data_subc);
 
       // add CP at alamouti1, alamouti2 and preambles
-      for (int i = 0; i < d_L; i++) {
-	d_preambleCP[i] = d_preamble[d_N - d_L + i];
-	d_alamouti1CP[i] = d_alamouti1[d_N - d_L + i];
-	d_alamouti2CP[i] = d_alamouti2[d_N - d_L + i];
+      for (int i = 0; i < d_channel_len; i++) {
+	d_preambleCP[i] = d_preamble[d_N_preamble_subc - d_channel_len + i];
+	d_alamouti1CP[i] = d_alamouti1[d_N_data_subc - d_channel_len + i];
+	d_alamouti2CP[i] = d_alamouti2[d_N_data_subc - d_channel_len + i];
       }
 
-      memcpy (&d_preambleCP[d_L], d_preamble, d_N * sizeof(gr_complex));
-      memcpy (&d_alamouti1CP[d_L], d_alamouti1, d_N * sizeof(gr_complex));
-      memcpy (&d_alamouti2CP[d_L], d_alamouti2, d_N * sizeof(gr_complex));
+      memcpy (&d_preambleCP[d_channel_len], d_preamble,
+	      d_N_preamble_subc * sizeof(gr_complex));
+      memcpy (&d_alamouti1CP[d_channel_len], d_alamouti1,
+	      d_N_data_subc * sizeof(gr_complex));
+      memcpy (&d_alamouti2CP[d_channel_len], d_alamouti2,
+	      d_N_data_subc * sizeof(gr_complex));
 
       d_tx1_packet = (gr_complex*) volk_malloc (
-	  2 * (d_N + d_L) * sizeof(gr_complex), 32);
+	  (d_N_data_subc + d_N_preamble_subc + 2 * d_channel_len)
+	      * sizeof(gr_complex),
+	  32);
       d_tx2_packet = (gr_complex*) volk_malloc (
-	  2 * (d_N + d_L) * sizeof(gr_complex), 32);
+	  (d_N_data_subc + d_N_preamble_subc + 2 * d_channel_len)
+	      * sizeof(gr_complex),
+	  32);
 
       /* packet 1 for antenna 1*/
-      memcpy (d_tx1_packet, d_preambleCP, (d_N + d_L) * sizeof(gr_complex));
-      memcpy (&d_tx1_packet[d_N + d_L], d_alamouti1CP,
-	      (d_N + d_L) * sizeof(gr_complex));
+      memcpy (d_tx1_packet, d_preambleCP, (d_N_preamble_subc + d_channel_len) * sizeof(gr_complex));
+      memcpy (&d_tx1_packet[d_N_preamble_subc + d_channel_len], d_alamouti1CP,
+	      (d_N_data_subc + d_channel_len) * sizeof(gr_complex));
 
       /* packet 2 for antenna 2*/
-      memcpy (d_tx2_packet, d_preambleCP, (d_N + d_L) * sizeof(gr_complex));
-      memcpy (&d_tx2_packet[d_N + d_L], d_alamouti2CP,
-	      (d_N + d_L) * sizeof(gr_complex));
+      memcpy (d_tx2_packet, d_preambleCP, (d_N_preamble_subc + d_channel_len) * sizeof(gr_complex));
+      memcpy (&d_tx2_packet[d_N_preamble_subc + d_channel_len], d_alamouti2CP,
+	      (d_N_data_subc + d_channel_len) * sizeof(gr_complex));
 
       /* packets with zeros */
-      d_tx1_packet_with_zeros = (gr_complex*) volk_malloc (2*2*(d_N+d_L) * sizeof(gr_complex), 32);
-      d_tx2_packet_with_zeros = (gr_complex*) volk_malloc (2*2*(d_N+d_L) * sizeof(gr_complex), 32);
+      d_tx1_packet_with_zeros = (gr_complex*) volk_malloc (
+	  2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex), 32);
+      d_tx2_packet_with_zeros = (gr_complex*) volk_malloc (
+	  2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex), 32);
 
       memset (d_tx1_packet_with_zeros, 0,
-	      2 * 2 * (d_N + d_L) * sizeof(gr_complex));
+	      2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex));
       memset (d_tx2_packet_with_zeros, 0,
-	      2 * 2 * (d_N + d_L) * sizeof(gr_complex));
+	      2 *(d_N_data_subc + + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex));
       memcpy (d_tx1_packet_with_zeros, d_tx1_packet,
-	      2 * (d_N + d_L) * sizeof(gr_complex));
+	      (d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex));
       memcpy (d_tx2_packet_with_zeros, d_tx2_packet,
-	      2 * (d_N + d_L) * sizeof(gr_complex));
+	      (d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex));
 
       message_port_register_in (pmt::mp ("tx_en"));
-      set_output_multiple (2*2 * (d_N + d_L)); // useless?
+      set_output_multiple ( 2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len)); // useless?
 
     }
 
@@ -171,7 +201,8 @@ namespace gr
       volk_free (d_DATA);
       volk_free (d_tx1_packet_with_zeros);
       volk_free (d_tx2_packet_with_zeros);
-      delete d_fft;
+      delete d_fft_pr;
+      delete d_fft_da;
     }
 
     int
@@ -186,8 +217,10 @@ namespace gr
 	d_transmit_en = false;
 	/* block until message (command) to transmit received. The payload of the message is don't care */
 	pmt::pmt_t msg = delete_head_blocking (pmt::mp ("tx_en"));
-	memcpy (out1, d_tx1_packet_with_zeros, 2*2 * (d_N + d_L) * sizeof(gr_complex));
-	memcpy (out2, d_tx2_packet_with_zeros, 2*2 * (d_N + d_L) * sizeof(gr_complex));
+	memcpy (out1, d_tx1_packet_with_zeros,
+		 2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex));
+	memcpy (out2, d_tx2_packet_with_zeros,
+		 2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex));
 	d_transmit_ack = true;
       }
 
@@ -197,14 +230,14 @@ namespace gr
 
       }
       // Tell runtime system how many output items we produced.
-      return 2*2 * (d_N + d_L);
+      return  2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len);
     }
 
     void
     Alamouti_TX_impl::create_data (gr_complex *random_symbols,
-				   int random_factor, int step)
+				   int random_factor, int step, int n_items)
     {
-      for (int i = 0; i < d_N; i = i + step) {
+      for (int i = 0; i < n_items; i = i + step) {
 	srand (i * random_factor);
 	random_symbols[i].real ((1 - 2 * (rand () % 2)) * 1);  // Real +-1
 	random_symbols[i].imag ((1 - 2 * (rand () % 2)) * 1);  // Imag +-1

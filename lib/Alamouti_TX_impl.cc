@@ -49,9 +49,7 @@ namespace gr
 			    gr::io_signature::make (2, 2, sizeof(gr_complex))),
 	    d_N_data_subc (N_data_subc),
 	    d_N_preamble_subc (N_preamble_subc),
-	    d_channel_len (channel_len),
-	    d_transmit_en (true),
-	    d_transmit_ack (false)
+	    d_channel_len (channel_len)
 
     {
       d_DATA = (gr_complex*) volk_malloc ((d_N_data_subc) * sizeof(gr_complex),
@@ -152,32 +150,49 @@ namespace gr
 	  32);
 
       /* packet 1 for antenna 1*/
-      memcpy (d_tx1_packet, d_preambleCP, (d_N_preamble_subc + d_channel_len) * sizeof(gr_complex));
+      memcpy (d_tx1_packet, d_preambleCP,
+	      (d_N_preamble_subc + d_channel_len) * sizeof(gr_complex));
       memcpy (&d_tx1_packet[d_N_preamble_subc + d_channel_len], d_alamouti1CP,
 	      (d_N_data_subc + d_channel_len) * sizeof(gr_complex));
 
       /* packet 2 for antenna 2*/
-      memcpy (d_tx2_packet, d_preambleCP, (d_N_preamble_subc + d_channel_len) * sizeof(gr_complex));
+      memcpy (d_tx2_packet, d_preambleCP,
+	      (d_N_preamble_subc + d_channel_len) * sizeof(gr_complex));
       memcpy (&d_tx2_packet[d_N_preamble_subc + d_channel_len], d_alamouti2CP,
 	      (d_N_data_subc + d_channel_len) * sizeof(gr_complex));
 
       /* packets with zeros */
       d_tx1_packet_with_zeros = (gr_complex*) volk_malloc (
-	  2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex), 32);
+	  2 * (d_N_data_subc + d_N_preamble_subc + 2 * d_channel_len)
+	      * sizeof(gr_complex),
+	  32);
       d_tx2_packet_with_zeros = (gr_complex*) volk_malloc (
-	  2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex), 32);
+	  2 * (d_N_data_subc + d_N_preamble_subc + 2 * d_channel_len)
+	      * sizeof(gr_complex),
+	  32);
 
-      memset (d_tx1_packet_with_zeros, 0,
-	      2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex));
-      memset (d_tx2_packet_with_zeros, 0,
-	      2 *(d_N_data_subc + + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex));
-      memcpy (d_tx1_packet_with_zeros, d_tx1_packet,
-	      (d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex));
-      memcpy (d_tx2_packet_with_zeros, d_tx2_packet,
-	      (d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex));
+      memset (
+	  d_tx1_packet_with_zeros,
+	  0,
+	  2 * (d_N_data_subc + d_N_preamble_subc + 2 * d_channel_len)
+	      * sizeof(gr_complex));
+      memset (
+	  d_tx2_packet_with_zeros,
+	  0,
+	  2 * (d_N_data_subc + +d_N_preamble_subc + 2 * d_channel_len)
+	      * sizeof(gr_complex));
+      memcpy (
+	  d_tx1_packet_with_zeros,
+	  d_tx1_packet,
+	  (d_N_data_subc + d_N_preamble_subc + 2 * d_channel_len)
+	      * sizeof(gr_complex));
+      memcpy (
+	  d_tx2_packet_with_zeros,
+	  d_tx2_packet,
+	  (d_N_data_subc + d_N_preamble_subc + 2 * d_channel_len)
+	      * sizeof(gr_complex));
 
       message_port_register_in (pmt::mp ("tx_en"));
-      set_output_multiple ( 2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len)); // useless?
 
     }
 
@@ -213,24 +228,20 @@ namespace gr
       gr_complex *out1 = (gr_complex*) output_items[0];
       gr_complex *out2 = (gr_complex*) output_items[1];
 
-      if (d_transmit_en) {
-	d_transmit_en = false;
-	/* block until message (command) to transmit received. The payload of the message is don't care */
-	pmt::pmt_t msg = delete_head_blocking (pmt::mp ("tx_en"));
-	memcpy (out1, d_tx1_packet_with_zeros,
-		 2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex));
-	memcpy (out2, d_tx2_packet_with_zeros,
-		 2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len) * sizeof(gr_complex));
-	d_transmit_ack = true;
-      }
+      pmt::pmt_t msg = delete_head_blocking (pmt::mp ("tx_en"));
+      memcpy (
+	  out1,
+	  d_tx1_packet_with_zeros,
+	  2 * (d_N_data_subc + d_N_preamble_subc + 2 * d_channel_len)
+	      * sizeof(gr_complex));
+      memcpy (
+	  out2,
+	  d_tx2_packet_with_zeros,
+	  2 * (d_N_data_subc + d_N_preamble_subc + 2 * d_channel_len)
+	      * sizeof(gr_complex));
 
-      if (d_transmit_ack) {
-	d_transmit_en = true;
-	d_transmit_ack = false;
-
-      }
       // Tell runtime system how many output items we produced.
-      return  2 *(d_N_data_subc + d_N_preamble_subc+ 2*d_channel_len);
+      return 2 * (d_N_data_subc + d_N_preamble_subc + 2 * d_channel_len);
     }
 
     void

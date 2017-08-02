@@ -38,8 +38,6 @@ namespace gr
       size_t d_N_data_subc;
       size_t d_N_preamble_subc;
       size_t d_channel_len;
-      bool d_transmit_en;
-      bool d_transmit_ack;
 
       gr_complex *d_DATA;
       gr_complex *d_PREAMBLE;
